@@ -30,29 +30,36 @@ class Recode:
         self.fps = fps
         self.isRecoding = False
         self.r_recode = RealtimeRecode()
+        self.encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 25]
 
     def _recode(self):
         frame = self.r_recode.sct()
         return frame
 
     def start_recode(self):
-        #size = (3840,2400) 
-        #fmt = cv2.VideoWriter_fourcc('m', 'p', '4', 'v') 
-        ##fmt = cv2.VideoWriter_fourcc(*'MJPG') 
-        #writer = cv2.VideoWriter('outtest.avi', fmt, 1, size) 
+        size = (3840,2400) 
+        fmt = cv2.VideoWriter_fourcc('m', 'p', '4', 'v') 
+        #fmt = cv2.VideoWriter_fourcc(*'MJPG') 
+        writer = cv2.VideoWriter('outtest.mp4', fmt, 10, size) 
 
-        ##writer.write(frame) # 画像を1フレーム分として書き込み
-        #for i in range(10):
-        #    sct = self._recode()
-        #    #cv2.imwrite("images/test_{}.png".format(str(i)),sct)
-        #    writer.write(sct) 
+        #writer.write(frame) # 画像を1フレーム分として書き込み
+        for i in range(50):
+            sct = self._recode()
+            _, jpeg = cv2.imencode('.jpg', sct, self.encode_param)
+            #print(sct.shape)
+            #cv2.imwrite("images/test_{}.png".format(str(i)),sct)
+            writer.write(jpeg) 
 
-        #writer.release() # ファイルを閉じる
-        writer = skvideo.io.FFmpegWriter("outputvideo.mp4")
-        sct = self._recode()
-        for i in range(5):
-                writer.writeFrame(sct)
-        writer.close()
+        writer.release() # ファイルを閉じる
+
+        #writer = skvideo.io.FFmpegWriter("outputvideo.mp4")
+        #sct = self._recode()
+        #cv2.imwrite("omg.png",sct)
+        #sct = cv2.imread("omg.png")
+        #print(sct.shape)
+        #for i in range(500):
+        #        writer.writeFrame(sct)
+        #writer.close()
 
     def _timekeeper(self):
         self.isRecoding = True
