@@ -1,16 +1,24 @@
 import time
-
+import threading
+import asyncio
+#from multiprocessing import Pool, Process
+from pathos.pools import _ProcessPool as Pool
+#from pathos.pools import ProcessPool as Pool
 import mss
 import cv2
-import skvideo.io
+#import skvideo.io
 import numpy
+import concurrent.futures
+
+import imageio
+
+from moviepy.editor import VideoFileClip
 
 
-
-
-class RealtimeRecode:
+class RealtimeRecorder:
     def __init__(self):
         self.sct_mss = mss.mss()
+        # FIXME:
         self.monitor = {"top": 0, "left": 0, "width": 1920, "height": 1200}
         #self.width = self.monitor["width"] * 2
         #self.height = self.monitor["height"] * 2
@@ -23,59 +31,152 @@ class RealtimeRecode:
 
 
 # TODO:デスクトップ音声ってどうやって取得するん
-class Recode:
-    def __init__(self,filename,time,fps=30):
+class Recorder:
+    def __init__(self,filename,time,*,fps=30,desktop_sound=False,):
         self.filename = filename
         self.time = time
         self.fps = fps
         self.isRecoding = False
-        self.r_recode = RealtimeRecode()
+        self.desktop_sound = desktop_sound
+        self.r_record = RealtimeRecorder()
         self.encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 25]
+        #cv2.setNumThreads(0)
 
-    def _recode(self):
-        frame = self.r_recode.sct()
+    def _recorder(self):
+        print("recoder called!")
+        frame = self.r_record.sct()
         return frame
 
-    def start_recode(self):
-        size = (3840,2400) 
-        fmt = cv2.VideoWriter_fourcc('m', 'p', '4', 'v') 
-        #fmt = cv2.VideoWriter_fourcc(*'MJPG') 
-        writer = cv2.VideoWriter('outtest.mp4', fmt, 10, size) 
+    def _frame_record(self):
+        t = time.time()
+        frame = self._recorder()
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        endtime = time.time() - t
+        
+        self.writer.append_data(frame)
+        #print(f"fps: {1 / endtime}")
+        #time.sleep(0.2 - endtime)
+        #self.writer.writeFrame(frame)
+        #self.writer.append_data(frame)
+        #threading.Thread(target=self._frame_writer,args=(frame,)).start()
 
-        #writer.write(frame) # 画像を1フレーム分として書き込み
-        for i in range(50):
-            sct = self._recode()
-            _, jpeg = cv2.imencode('.jpg', sct, self.encode_param)
-            #print(sct.shape)
-            #cv2.imwrite("images/test_{}.png".format(str(i)),sct)
-            writer.write(jpeg) 
+    def _frame_writer(self,frame):
+        self.writer.append_data(frame)
 
-        writer.release() # ファイルを閉じる
+    def _recode_audio(self):
+        pass
 
+    def test(self):
+        print("TESTING...")
+
+    def start_record(self):
         #writer = skvideo.io.FFmpegWriter("outputvideo.mp4")
-        #sct = self._recode()
-        #cv2.imwrite("omg.png",sct)
-        #sct = cv2.imread("omg.png")
+        fps = 30
+        width = 3840
+        height = 2400
+        crf = 17
+        #self.writer = skvideo.io.FFmpegWriter('test_ffmpeg.mp4', 
+        #            inputdict={'-r': str(fps), '-s':'{}x{}'.format(width,height)},
+        #            outputdict={'-r': str(fps), '-c:v': 'libx264', '-crf': str(crf), '-preset': 'ultrafast', '-pix_fmt': 'yuv444p'}
+        #) 
+        self.writer = imageio.get_writer(self.filename,fps=10)
+
+        print(self.writer)
         #print(sct.shape)
-        #for i in range(500):
-        #        writer.writeFrame(sct)
-        #writer.close()
+        print("record start")
+        threading.Thread(target=self._timekeeper).start()
+
+        # FIXME: Threadだと10fpsぐらいだと間に合うが、20fps 超えると無理。
+        with concurrent.futures.ThreadPoolExecutor() as excuter:
+            while self.isRecoding:
+                t = time.time()
+                future = excuter.submit(self._frame_record)
+                print("fps: {}".format(time.time() - t))
+                time.sleep(1/10)
+        # FIXME; process run
+        #excuter = concurrent.futures.ProcessPoolExecutor(max_workers=10)
+        #while self.isRecoding:
+        #    res = excuter.map(self._frame_record,range(1))
+        #    print(res)
+        #    time.sleep(1/10)
+        #frame = 0
+        #kwhile self.isRecoding:
+        #    threading.Thread(target=self._frame_record).start()
+        #    frame += 1
+        #    time.sleep(1/20)
+        #Jprint(frame)
+        #p = Pool(4)
+        #while self.isRecoding:
+        #    #p.apply(self._test)
+        #    #res = p.apply_async(self.test)
+        #    res = p.map(self._frame_record,range(1))
+        #    time.sleep(1/60)
+
+        #p.close()
+        #excuter.close()
+        #while self.isRecoding:
+        #    self._frame_record()
+            #time.sleep(1/60)
+
+        print("closeing")
+        time.sleep(1)
+        self.writer.close()
+
+        if self.desktop_sound:
+            print('enable desktop_sound')
+            #clip_input = VideoFileClip("test.mp4").subclip()
+            #clip_input.audio.write_audiofile("sound.wav")
+            #clip = VideoFileClip('test.mp4').subclip()
+            #clip.write_videofile('video_and_audio.mp4', audio='sound.mp3')
+        
+        #st = time.time()
+        #for i in range(200):
+        #    sct = self._recode()
+        #    time.sleep(1/60)
+        #    #cv2.imwrite("omg.png",sct)
+        #    #sct = cv2.imread("omg.png")
+        #    writer.writeFrame(sct)
+        #print("recodetime",time.time() - st )
+        #sc = time.time()
+        #self.writer.close()
+        #print("encodetime", time.time() - sc )
 
     def _timekeeper(self):
         self.isRecoding = True
+        print("time keep start",self.time)
         time.sleep(self.time)
         self.isRecoding = False
+        print("time keep end")
+
+    #def sct_mainloop(self):
+    #    with concurrent.futures.ThreadPoolExecutor() as excuter:
+    #        while self.isRecoding:
+    #            future = excuter.submit(self._frame_recode)
+    #            time.sleep(1/30)
+    #    print("closeing")
+    #    time.sleep(1)
+    #    self.writer.close()
 
 
+    #def opencv_recode(self):
+        #size = (3840,2400) 
+        #fmt = cv2.VideoWriter_fourcc('m', 'p', '4', 'v') 
+        ##fmt = cv2.VideoWriter_fourcc(*'MJPG') 
+        #writer = cv2.VideoWriter('outtest.mp4', fmt, 10, size) 
 
-#
-#    def sct_mainloop(self):
-#        with concurrent.futures.ThreadPoolExecutor() as excuter:
-#            while self.do_run:
-#                future = excuter.submit(self.sct_func)
-#                time.sleep(1/30)
+        ##writer.write(frame) # 画像を1フレーム分として書き込み
+        #for i in range(10):
+        #    sct = self._recode()
+        #    #_, jpeg = cv2.imencode('.jpg', sct, self.encode_param)
+        #    #print(sct.shape)
+        #    #cv2.imwrite("images/test_{}.png".format(str(i)),sct)
+        #    writer.write(sct)
+        #    time.sleep(1)
+        #writer.release() 
+
+
 
 
 if __name__ == "__main__":
-    sct = Recode("test.mp4",30)
-    sct.start_recode()
+    sct = Recorder("test.mp4",36, desktop_sound=True)
+    sct.start_record()
