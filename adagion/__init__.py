@@ -1,3 +1,4 @@
+import tempfile
 import time
 import threading
 import asyncio
@@ -12,7 +13,10 @@ import concurrent.futures
 
 import imageio
 
-from moviepy.editor import VideoFileClip
+#from moviepy.editor import VideoFileClip
+from ffmpy3 import FFmpeg
+
+from audioRecoder import AudioRecoder
 
 
 class RealtimeRecorder:
@@ -34,12 +38,14 @@ class RealtimeRecorder:
 class Recorder:
     def __init__(self,filename,time,*,fps=30,desktop_sound=False,):
         self.filename = filename
+        self.filext = filename.split('.')[-1]
         self.time = time
         self.fps = fps
         self.isRecoding = False
         self.desktop_sound = desktop_sound
         self.r_record = RealtimeRecorder()
         self.encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 25]
+        self.tempfolder = tempfile.TemporaryDirectory()
         #cv2.setNumThreads(0)
 
     def _recorder(self):
@@ -63,8 +69,11 @@ class Recorder:
     def _frame_writer(self,frame):
         self.writer.append_data(frame)
 
-    def _recode_audio(self):
-        pass
+    def _record_audio(self,filename):
+        ar = AudioRecoder(filename,None)
+        threading.Thread(target=ar.start).start()
+        return ar
+
 
     def test(self):
         print("TESTING...")
@@ -79,12 +88,17 @@ class Recorder:
         #            inputdict={'-r': str(fps), '-s':'{}x{}'.format(width,height)},
         #            outputdict={'-r': str(fps), '-c:v': 'libx264', '-crf': str(crf), '-preset': 'ultrafast', '-pix_fmt': 'yuv444p'}
         #) 
-        self.writer = imageio.get_writer(self.filename,fps=10)
+        tempvfile = self.tempfolder.name + "/v." + self.filext
+        self.writer = imageio.get_writer(tempvfile,fps=10)
 
         print(self.writer)
         #print(sct.shape)
         print("record start")
         threading.Thread(target=self._timekeeper).start()
+
+        if self.desktop_sound:
+            audiofile = self.tempfolder.name + "/a.wav"
+            ar = self._record_audio(audiofile)
 
         # FIXME: Threadだと10fpsぐらいだと間に合うが、20fps 超えると無理。
         with concurrent.futures.ThreadPoolExecutor() as excuter:
@@ -93,6 +107,9 @@ class Recorder:
                 future = excuter.submit(self._frame_record)
                 print("fps: {}".format(time.time() - t))
                 time.sleep(1/10)
+
+        if self.desktop_sound:
+            ar.stop()
         # FIXME; process run
         #excuter = concurrent.futures.ProcessPoolExecutor(max_workers=10)
         #while self.isRecoding:
@@ -124,22 +141,10 @@ class Recorder:
 
         if self.desktop_sound:
             print('enable desktop_sound')
-            #clip_input = VideoFileClip("test.mp4").subclip()
-            #clip_input.audio.write_audiofile("sound.wav")
-            #clip = VideoFileClip('test.mp4').subclip()
-            #clip.write_videofile('video_and_audio.mp4', audio='sound.mp3')
+            ff = FFmpeg(inputs={tempvfile: None, audiofile: None},
+                        outputs={self.filename: '-c:v copy -c:a aac -map 0:v:0 -map 1:a:0 -loglevel quiet'})
+            ff.run()
         
-        #st = time.time()
-        #for i in range(200):
-        #    sct = self._recode()
-        #    time.sleep(1/60)
-        #    #cv2.imwrite("omg.png",sct)
-        #    #sct = cv2.imread("omg.png")
-        #    writer.writeFrame(sct)
-        #print("recodetime",time.time() - st )
-        #sc = time.time()
-        #self.writer.close()
-        #print("encodetime", time.time() - sc )
 
     def _timekeeper(self):
         self.isRecoding = True
@@ -178,5 +183,5 @@ class Recorder:
 
 
 if __name__ == "__main__":
-    sct = Recorder("test.mp4",36, desktop_sound=True)
+    sct = Recorder("test12345.mp4",10, desktop_sound=True)
     sct.start_record()

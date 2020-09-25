@@ -34,12 +34,23 @@ class AudioRecoder:
             self.isRecoding = True
         else:
             threading.Thread(target=self._timekeeper).start()
+        counter = 0
+        cashe = b''
         while self.isRecoding:
-            #frame = self.rar.get()
-            data = self.rar.stream.read(self.rar.CHUNK)
-            self.rar.stream_out.write(data)
+            data = self.rar.get()
+            #if cashe == data:
+            #    print('same')
+            #else:
+            #    cashe = data
             wf.writeframes(data)
+            
+            #counter += 1
+            #data = self.rar.stream.read(self.rar.CHUNK)
+            #self.rar.stream_out.write(data)
+            #wf.writeframes(data)
        # wf.writeframes(b''.join(frames))
+
+        print(counter)
 
         wf.close()
         self.rar.stop()
@@ -56,5 +67,5 @@ class AudioRecoder:
 if __name__ == "__main__":
     ar = AudioRecoder("tester.wav",None)
     threading.Thread(target=ar.start).start()
-    time.sleep(5)
+    time.sleep(10)
     ar.stop()
